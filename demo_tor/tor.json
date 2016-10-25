@@ -948,8 +948,8 @@
                 "arp",
                 "ipv6_base",
                 "udp",
-                "tcp",
-                "icmp_header"
+                "icmp_header",
+                "tcp"
             ]
         }
     ],
@@ -1830,8 +1830,8 @@
                         "send_to_cpu"
                     ],
                     "next_tables": {
-                        "l3_egress_port_set": "cpu_queue_assignment",
-                        "send_to_cpu": "cpu_queue_assignment"
+                        "l3_egress_port_set": "ingress_nexthop_table",
+                        "send_to_cpu": "ingress_nexthop_table"
                     },
                     "default_entry": {
                         "action_id": 8,
@@ -1982,8 +1982,8 @@
                         "drop_packet"
                     ],
                     "next_tables": {
-                        "l3_egress_port_set": "cpu_queue_assignment",
-                        "drop_packet": "cpu_queue_assignment"
+                        "l3_egress_port_set": "ingress_nexthop_table",
+                        "drop_packet": "ingress_nexthop_table"
                     },
                     "default_entry": {
                         "action_id": 10,
@@ -2017,8 +2017,8 @@
                         "send_to_cpu"
                     ],
                     "next_tables": {
-                        "ipv4_ipv6_update_mac": null,
-                        "send_to_cpu": null
+                        "ipv4_ipv6_update_mac": "cpu_queue_assignment",
+                        "send_to_cpu": "cpu_queue_assignment"
                     },
                     "default_entry": {
                         "action_id": 8,
@@ -2028,7 +2028,7 @@
                         ],
                         "action_entry_const": false
                     },
-                    "base_default_next": null
+                    "base_default_next": "cpu_queue_assignment"
                 },
                 {
                     "name": "cpu_queue_assignment",
@@ -2294,9 +2294,9 @@
                     ],
                     "next_tables": {
                         "__HIT__": "meter_action",
-                        "__MISS__": "_condition_4"
+                        "__MISS__": null
                     },
-                    "base_default_next": "_condition_4"
+                    "base_default_next": null
                 },
                 {
                     "name": "meter_action",
@@ -2330,10 +2330,10 @@
                         "meter_deny"
                     ],
                     "next_tables": {
-                        "meter_permit": "_condition_4",
-                        "meter_deny": "_condition_4"
+                        "meter_permit": null,
+                        "meter_deny": null
                     },
-                    "base_default_next": "_condition_4"
+                    "base_default_next": null
                 }
             ],
             "conditionals": [
@@ -2404,40 +2404,6 @@
                     },
                     "true_next": "l3_ipv6_override_table",
                     "false_next": "cpu_queue_assignment"
-                },
-                {
-                    "name": "_condition_4",
-                    "id": 4,
-                    "expression": {
-                        "type": "expression",
-                        "value": {
-                            "op": "or",
-                            "left": {
-                                "type": "expression",
-                                "value": {
-                                    "op": "valid",
-                                    "left": null,
-                                    "right": {
-                                        "type": "header",
-                                        "value": "ipv4_base"
-                                    }
-                                }
-                            },
-                            "right": {
-                                "type": "expression",
-                                "value": {
-                                    "op": "valid",
-                                    "left": null,
-                                    "right": {
-                                        "type": "header",
-                                        "value": "ipv6_base"
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "true_next": "ingress_nexthop_table",
-                    "false_next": null
                 }
             ]
         },
@@ -2485,7 +2451,7 @@
             "conditionals": [
                 {
                     "name": "_condition_5",
-                    "id": 5,
+                    "id": 4,
                     "expression": {
                         "type": "expression",
                         "value": {

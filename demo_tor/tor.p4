@@ -675,7 +675,6 @@ table cpu_queue_assignment {
     set_queue_and_copy_to_cpu;
     set_queue_and_send_to_cpu;
   }
-//  default_action: set_queue_and_send_to_cpu(0, 0);
   default_action: nop();
 }
 
@@ -804,11 +803,11 @@ control ingress {
       ingress_pkt_classifier();
       apply(l3_routing_classifier);
       ingress_lpm_forwarding();
-      apply(cpu_queue_assignment);
-      process_ingress_meters();
       if(valid(ipv4_base) or valid(ipv6_base)) {
         apply(ingress_nexthop_table);
       }
+      apply(cpu_queue_assignment);
+      process_ingress_meters();
     }
   }
 }
