@@ -28,9 +28,9 @@ the switch. The gRPC server translates the protobuf messages into PI library
 calls (using the PI C++ frontend).
 
 To run the demo, you will need 3 terminal instances:
-- `sudo python 1sw_demo.py --json simple_router.json --cpu-port veth250`
+- `sudo python 1sw_demo.py --json tor.json --cpu-port veth250`
 - `sudo ./pi_server`
-- `sudo ./controller -c simple_router.json`
+- `sudo ./controller -c tor.json`
 
 Note that the demo assumes that you have a veth250 / veth251 veth pair on your
 machine (used for the switch CPU port). You can create one with:
@@ -52,8 +52,8 @@ query a counter.
 - [pi_server.cpp] (pi_server.cpp): the gRPC server which implements the PI
   service handlers. This code translates the Protobuf messages into PI library
   calls.
-- [simple_router_mgr.h] (simple_router_mgr.h) and [simple_router_mgr.cpp]
-  (simple_router_mgr.cpp): they define the `SimpleRouterMgr` class, in charge of
+- [tor_mgr.h] (tor_mgr.h) and [tor_mgr.cpp]
+  (tor_mgr.cpp): they define the `TorMgr` class, in charge of
   managing one switch instance in the context of the controller.
 - [web_server.h] (web_server.h) and [web_server.cpp] (web_server.cpp): they
   define the `WebServer` class, which exposes a web interface into the
