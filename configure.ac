@@ -165,6 +165,7 @@ AC_CONFIG_FILES([Makefile
                  include/Makefile
                  lib/Makefile
                  demo_grpc/Makefile
+                 demo_tor/Makefile
                  src/Makefile
                  targets/Makefile
                  targets/dummy/Makefile

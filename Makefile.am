@@ -9,7 +9,7 @@ MAYBE_PROTO = proto
 endif
 
 if WITH_PROTO_DEMO
-MAYBE_PROTO_DEMO = demo_grpc
+MAYBE_PROTO_DEMO = demo_grpc demo_tor
 endif
 
 # examples need to come after generators!
