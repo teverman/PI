@@ -9,7 +9,6 @@
 //------------------------------------------------------------------------------
 
 #define CPU_PORT 64
-#define NULL_PORT 256
 
 #define ARP_REASON 1
 
@@ -451,6 +450,7 @@ table l3_ipv4_override_table {
     l3_forwarding;
 //    l3_set_ecmp_group;
   }
+  default_action: l3_forwarding(0);
 }
 
 table l3_ipv4_vrf_table {
@@ -459,9 +459,11 @@ table l3_ipv4_vrf_table {
     ipv4_base.dstAddr : lpm;
   }
   actions {
+nop;
     l3_forwarding;
 //    l3_set_ecmp_group;
   }
+  default_action: l3_forwarding(0);
 }
 
 table l3_ipv4_fallback_table {
@@ -472,6 +474,7 @@ table l3_ipv4_fallback_table {
     l3_forwarding;
 //    l3_set_ecmp_group;
   }
+  default_action: l3_forwarding(0);
 }
 
 table l3_ipv4_nexthop_resolve {
@@ -481,7 +484,7 @@ table l3_ipv4_nexthop_resolve {
   actions {
     l3_egress_port_set;
   }
-  default_action: l3_egress_port_set(NULL_PORT);
+  default_action: send_to_cpu(0);
 }
 
 
@@ -512,6 +515,7 @@ table l3_ipv6_override_table {
     // L3 forwarding on a match.
     l3_forwarding;
   }
+  default_action: l3_forwarding(0);
 }
 
 table l3_ipv6_vrf_table {
@@ -522,6 +526,7 @@ table l3_ipv6_vrf_table {
   actions {
     l3_forwarding;
   }
+  default_action: l3_forwarding(0);
 }
 
 table l3_ipv6_fallback_table {
@@ -531,6 +536,7 @@ table l3_ipv6_fallback_table {
   actions {
     l3_forwarding;
   }
+  default_action: l3_forwarding(0);
 }
 
 table l3_ipv6_nexthop_resolve {
@@ -540,7 +546,7 @@ table l3_ipv6_nexthop_resolve {
   actions {
     l3_egress_port_set;
   }
-  default_action: l3_egress_port_set(NULL_PORT);
+  default_action: drop_packet();
 }
 
 // LPM forwarding for IPV6 packets.
@@ -591,20 +597,21 @@ table egress_port_smac {
   default_action: drop_packet();
 }
 
-// Sets the egress mac.
-action egress_ipv4_ipv6_update_mac(dst_mac) {
+// Sets the dest mac.
+action ipv4_ipv6_update_mac(dst_mac) {
   modify_field(ethernet.dstAddr, dst_mac);
   // if switch_properties is used
 //  modify_field(ethernet.srcAddr, local_metadata.src_mac);
 }
 
-table egress_nexthop_table {
+table ingress_nexthop_table {
   reads {
     local_metadata.nexthop_index : exact;
   }
   actions {
-    egress_ipv4_ipv6_update_mac;
+    ipv4_ipv6_update_mac;
   }
+  default_action: send_to_cpu(0);
 }
 
 
@@ -668,7 +675,8 @@ table cpu_queue_assignment {
     set_queue_and_copy_to_cpu;
     set_queue_and_send_to_cpu;
   }
-  default_action: set_queue_and_send_to_cpu(0, 0);
+//  default_action: set_queue_and_send_to_cpu(0, 0);
+  default_action: nop();
 }
 
 // TODO - This should be a runtime entry in the above table
@@ -798,6 +806,9 @@ control ingress {
       ingress_lpm_forwarding();
       apply(cpu_queue_assignment);
       process_ingress_meters();
+      if(valid(ipv4_base) or valid(ipv6_base)) {
+        apply(ingress_nexthop_table);
+      }
     }
   }
 }
@@ -810,9 +821,6 @@ control ingress {
 control egress {
   if (not valid(cpu_header)) {
     apply(egress_port_smac);
-    if(valid(ipv4_base) or valid(ipv6_base)) {
-      apply(egress_nexthop_table);
-    }
   }
 }
 

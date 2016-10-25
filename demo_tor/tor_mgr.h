@@ -88,7 +88,7 @@ class TorMgr {
   int assign();
 
   int add_route(uint32_t prefix, int pLen, uint32_t nhopIp,
-		  uint32_t port);
+		  uint16_t port);
 
   int set_default_entries();
   int static_config();
@@ -141,8 +141,10 @@ class TorMgr {
 
   int set_one_default_entry(pi_p4_id_t t_id, p4::Action *action);
 
+  int set_nexthop_egress_port(uint32_t nhopindex, uint16_t port);
+
   int add_route_(uint32_t prefix, int pLen, uint32_t nhopIp,
-                 uint32_t port, UpdateMode update_mode);
+                 uint16_t port, UpdateMode update_mode);
 
   void add_iface_(uint16_t port_num, uint32_t ip_addr,
                   const unsigned char (&mac_addr)[6], UpdateMode update_mode);

@@ -284,9 +284,36 @@ TorMgr::add_one_entry(p4::TableEntry *match_action_entry) {
   return rep.errors().size();
 }
 
+int TorMgr::set_nexthop_egress_port(uint32_t nhopindex, uint16_t port) {
+  int rc = 0;
+  pi_p4_id_t t_id = pi_p4info_table_id_from_name(p4info, "l3_ipv4_nexthop_resolve");
+  pi_p4_id_t a_id = pi_p4info_action_id_from_name(p4info, "l3_egress_port_set");
+
+  p4::TableEntry match_action_entry;
+  match_action_entry.set_table_id(t_id);
+
+  auto mf = match_action_entry.add_match();
+  mf->set_field_id(pi_p4info_field_id_from_name(p4info, "local_metadata.nexthop_index"));
+  auto mf_exact = mf->mutable_exact();
+  mf_exact->set_value(uint_to_string(nhopindex));
+
+  auto entry = match_action_entry.mutable_action();
+  auto action = entry->mutable_action();
+  action->set_action_id(a_id);
+  {
+    auto param = action->add_params();
+    param->set_param_id(
+        pi_p4info_action_param_id_from_name(p4info, a_id, "port"));
+    param->set_value(uint_to_string(port));
+  }
+
+  rc = add_one_entry(&match_action_entry);
+  return rc;
+}
+
 int
 TorMgr::add_route_(uint32_t prefix, int pLen, uint32_t nhopindex,
-			    uint32_t port,
+			    uint16_t port,
                             UpdateMode update_mode) {
   int rc = 0;
   if (update_mode == UpdateMode::DEVICE_STATE) {
@@ -319,31 +346,7 @@ TorMgr::add_route_(uint32_t prefix, int pLen, uint32_t nhopindex,
 
 
     // add the nexthop resolve table
-    // _
-    {
-      pi_p4_id_t t_id = pi_p4info_table_id_from_name(p4info, "l3_ipv4_nexthop_resolve");
-      pi_p4_id_t a_id = pi_p4info_action_id_from_name(p4info, "l3_egress_port_set");
-
-      p4::TableEntry match_action_entry;
-      match_action_entry.set_table_id(t_id);
-
-      auto mf = match_action_entry.add_match();
-      mf->set_field_id(pi_p4info_field_id_from_name(p4info, "local_metadata.nexthop_index"));
-      auto mf_exact = mf->mutable_exact();
-      mf_exact->set_value(uint_to_string(nhopindex));
-
-      auto entry = match_action_entry.mutable_action();
-      auto action = entry->mutable_action();
-      action->set_action_id(a_id);
-      {
-        auto param = action->add_params();
-        param->set_param_id(
-            pi_p4info_action_param_id_from_name(p4info, a_id, "port"));
-        param->set_value(uint_to_string(port));
-      }
-
-      rc = add_one_entry(&match_action_entry);
-    }
+    rc = set_nexthop_egress_port(nhopindex, port);
   }
 
   if (update_mode == UpdateMode::CONTROLLER_STATE) {
@@ -356,7 +359,7 @@ TorMgr::add_route_(uint32_t prefix, int pLen, uint32_t nhopindex,
 int
 TorMgr::add_route(uint32_t prefix, int pLen,
 	                       uint32_t nhop,
-			       uint32_t port) {
+			       uint16_t port) {
   int rc = 0;
   rc |= add_route_(prefix, pLen, nhop, port, UpdateMode::CONTROLLER_STATE);
   rc |= add_route_(prefix, pLen, nhop, port, UpdateMode::DEVICE_STATE);
@@ -366,8 +369,9 @@ TorMgr::add_route(uint32_t prefix, int pLen,
 int
 TorMgr::add_arp_entry(uint32_t addr,
                                const unsigned char (&mac_addr)[6]) {
-  pi_p4_id_t t_id = pi_p4info_table_id_from_name(p4info, "egress_nexthop_table");
-  pi_p4_id_t a_id = pi_p4info_action_id_from_name(p4info, "egress_ipv4_ipv6_update_mac");
+  // check if ARP Entry is already installed/changed
+  pi_p4_id_t t_id = pi_p4info_table_id_from_name(p4info, "ingress_nexthop_table");
+  pi_p4_id_t a_id = pi_p4info_action_id_from_name(p4info, "ipv4_ipv6_update_mac");
 
   p4::TableEntry match_action_entry;
   match_action_entry.set_table_id(t_id);
