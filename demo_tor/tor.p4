@@ -546,7 +546,7 @@ table l3_ipv6_nexthop_resolve {
   actions {
     l3_egress_port_set;
   }
-  default_action: drop_packet();
+  default_action: send_to_cpu(0);
 }
 
 // LPM forwarding for IPV6 packets.
@@ -600,8 +600,8 @@ table egress_port_smac {
 // Sets the dest mac.
 action ipv4_ipv6_update_mac(dst_mac) {
   modify_field(ethernet.dstAddr, dst_mac);
-  // if switch_properties is used
-//  modify_field(ethernet.srcAddr, local_metadata.src_mac);
+  // if switch_properties is used, use a fixed MAC
+  // modify_field(ethernet.srcAddr, local_metadata.src_mac);
 }
 
 table ingress_nexthop_table {
@@ -647,7 +647,7 @@ action set_queue_and_send_to_cpu(qid, reason) {
   send_to_cpu(reason);
 }
 
-table cpu_queue_assignment {
+table punt_table {
   reads {
     standard_metadata.ingress_port: exact;
     standard_metadata.egress_spec: exact;
@@ -777,10 +777,14 @@ table meter_action {
 //-----------------------------------
 
 // Meter control flow
-control process_ingress_meters {
-  apply(meter_assignment_and_evaluate) {
+control process_punt_packets {
+  apply(punt_table) {
     hit {
-      apply(meter_action);
+      apply(meter_assignment_and_evaluate) {
+        hit {
+          apply(meter_action);
+        }
+      }
     }
   }
 }
@@ -806,8 +810,7 @@ control ingress {
       if(valid(ipv4_base) or valid(ipv6_base)) {
         apply(ingress_nexthop_table);
       }
-      apply(cpu_queue_assignment);
-      process_ingress_meters();
+      process_punt_packets();
     }
   }
 }
