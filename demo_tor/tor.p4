@@ -32,7 +32,7 @@
 
 #define CPU_MIRROR_SESSION_ID 1024
 
-#define PORT_COUNT 4
+#define PORT_COUNT 256
 
 //------------------------------------------------------------------------------
 // Protocol Header Definitions
@@ -649,41 +649,37 @@ action set_queue_and_send_to_cpu(qid, reason) {
 
 table punt_table {
   reads {
-    standard_metadata.ingress_port: exact;
-    standard_metadata.egress_spec: exact;
+    standard_metadata.ingress_port: ternary;
+    standard_metadata.egress_spec: ternary;
 
     ethernet.etherType: exact;
+//    ethernet.etherType: ternary;
 
-    ipv4_base.diffserv: exact;
-    ipv6_base.traffic_class: exact;
+    ipv4_base.diffserv: ternary;
+    ipv6_base.traffic_class: ternary;
     ipv4_base.ttl: ternary;
     ipv6_base.hopLimit: ternary;
     ipv4_base.srcAddr: ternary;
     ipv4_base.dstAddr: ternary;
-    ipv4_base.protocol: exact;
-    ipv6_base.nextHeader: exact;
+    ipv6_base.srcAddr mask 0xFFFFFFFFFFFFFFFF: ternary;
+    ipv6_base.dstAddr mask 0xFFFFFFFFFFFFFFFF: ternary;
+    ipv4_base.protocol: ternary;
+    ipv6_base.nextHeader: ternary;
 
-    local_metadata.icmp_code: exact;
+    arp.protoDstAddr: ternary;
+    local_metadata.icmp_code: ternary;
 
-    vlan_tag[0].vid: exact;
-    vlan_tag[0].pcp: exact;
+    vlan_tag[0].vid: ternary;
+    vlan_tag[0].pcp: ternary;
 
-    local_metadata.class_id: exact;
-    local_metadata.vrf_id: exact;
+    local_metadata.class_id: ternary;
+    local_metadata.vrf_id: ternary;
   }
   actions {
     set_queue_and_copy_to_cpu;
     set_queue_and_send_to_cpu;
   }
-  default_action: nop();
-}
-
-// TODO - This should be a runtime entry in the above table
-table send_arp_to_cpu {
-  actions {
-    send_to_cpu;
-  }
-  default_action: send_to_cpu(ARP_REASON);
+  default_action: nop(); // handle non control packets
 }
 
 //------------------------------------------------------------------------------
@@ -724,12 +720,13 @@ action set_meter_index(meter_index) {
   execute_meter(meter_table, meter_index, local_metadata.color);
 }
 
-table meter_assignment_and_evaluate {
+table ingress_port_meter {
   reads {
     standard_metadata.ingress_port: exact;
     standard_metadata.egress_spec: exact;
     ethernet.etherType: exact;
     ipv4_base.dstAddr: ternary;
+    arp.protoDstAddr: ternary;
     local_metadata.class_id: exact;
   }
   actions {
@@ -745,7 +742,7 @@ table meter_assignment_and_evaluate {
 
 counter meter_stats {
   type : packets;
-  direct : meter_action;
+  direct : ingress_port_meter_action;
 }
 
 //-----------------------------------
@@ -760,7 +757,7 @@ action meter_deny() {
 action meter_permit() {
 }
 
-table meter_action {
+table ingress_port_meter_action {
   reads {
     local_metadata.color : exact;
     local_metadata.meter_index : exact;
@@ -780,9 +777,9 @@ table meter_action {
 control process_punt_packets {
   apply(punt_table) {
     hit {
-      apply(meter_assignment_and_evaluate) {
+      apply(ingress_port_meter) {
         hit {
-          apply(meter_action);
+          apply(ingress_port_meter_action);
         }
       }
     }
@@ -798,20 +795,15 @@ control ingress {
 //  apply(switch_properties);
 //  apply(port_properties);
   if (valid(cpu_header)) {
-      apply(process_cpu_header);
+    apply(process_cpu_header);
   } else {
-    // TODO - ARP processing should not be special cased
-    if (valid(arp)) {
-       apply(send_arp_to_cpu);
-    } else {
-      ingress_pkt_classifier();
-      apply(l3_routing_classifier);
-      ingress_lpm_forwarding();
-      if(valid(ipv4_base) or valid(ipv6_base)) {
-        apply(ingress_nexthop_table);
-      }
-      process_punt_packets();
+    ingress_pkt_classifier();
+    apply(l3_routing_classifier);
+    ingress_lpm_forwarding();
+    if(valid(ipv4_base) or valid(ipv6_base)) {
+      apply(ingress_nexthop_table);
     }
+    process_punt_packets();
   }
 }
 

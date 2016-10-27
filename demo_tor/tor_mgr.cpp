@@ -35,6 +35,7 @@ using grpc::Status;
 using grpc::ClientReaderWriter;
 
 #define CPU_PORT static_cast<uint16_t>(64)
+#define ARP_REASON static_cast<uint16_t>(1)
 
 namespace {
 
@@ -253,6 +254,11 @@ namespace {
 template <typename T> std::string uint_to_string(T i);
 
 template <>
+std::string uint_to_string<uint8_t>(uint8_t i) {
+  return std::string(reinterpret_cast<char *>(&i), sizeof(i));
+};
+
+template <>
 std::string uint_to_string<uint16_t>(uint16_t i) {
   i = ntohs(i);
   return std::string(reinterpret_cast<char *>(&i), sizeof(i));
@@ -282,6 +288,86 @@ TorMgr::add_one_entry(p4::TableEntry *match_action_entry) {
   update->release_table_entry();
 
   return rep.errors().size();
+}
+
+void TorMgr::set_ignore_mask_(p4::TableEntry &entry, std::vector <std::pair<const char *, int>> & fields) {
+  for(const auto &f : fields) {
+    auto mf = entry.add_match();
+    mf->set_field_id(pi_p4info_field_id_from_name(p4info, f.first));
+    auto mf_ternary = mf->mutable_ternary();
+    switch(f.second) {
+      case 1:
+        mf_ternary->set_mask(uint_to_string((uint8_t)0xFF));
+        break;
+      case 2:
+        mf_ternary->set_mask(uint_to_string((uint16_t)0xFFFF));
+        break;
+      case 4:
+        mf_ternary->set_mask(uint_to_string((uint32_t)0xFFFFFFFF));
+        break;
+        /*
+      case 16:
+        mf_ternary->set_mask(uint_to_string((uint128_t)0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF));
+        break;
+        */
+    }
+  }
+}
+
+int TorMgr::set_arp_punt_(void) {
+  int rc = 0;
+  pi_p4_id_t t_id = pi_p4info_table_id_from_name(p4info, "punt_table");
+  pi_p4_id_t a_id = pi_p4info_action_id_from_name(p4info, "set_queue_and_send_to_cpu");
+
+  p4::TableEntry match_action_entry;
+  match_action_entry.set_table_id(t_id);
+
+  auto mf = match_action_entry.add_match();
+  mf->set_field_id(pi_p4info_field_id_from_name(p4info, "ethernet.etherType"));
+  /*
+  auto mf_ternary = mf->mutable_ternary();
+  mf_ternary->set_value(uint_to_string((uint16_t)0x0806));
+  mf_ternary->set_mask(uint_to_string((uint16_t)0xFFFF));
+  static std::vector<std::pair<const char *, int>> fields= {
+  {"standard_metadata.ingress_port", 2},
+  {"standard_metadata.egress_spec", 2}, 
+  {"ipv4_base.diffserv", 1},
+  {"ipv6_base.traffic_class", 1},
+  {"ipv4_base.ttl", 1},
+  {"ipv6_base.hopLimit", 1},
+  {"ipv4_base.srcAddr", 4},
+  {"ipv4_base.dstAddr", 4},
+  {"ipv6_base.srcAddr", 16},
+  {"ipv6_base.dstAddr", 16},
+  {"ipv4_base.protocol", 1},
+  {"ipv6_base.nextHeader", 1},
+  {"arp.protoDstAddr", 4},
+  {"local_metadata.icmp_code", 8},
+  {"vlan_tag[0].vid", 1},
+  {"vlan_tag[0].pcp", 1},
+  {"local_metadata.class_id", 1},
+  {"local_metadata.vrf_id" , 4}
+	};
+  set_ignore_mask_(match_action_entry, fields);
+  */
+  auto mf_exact = mf->mutable_exact();
+  mf_exact->set_value(uint_to_string((uint16_t)0x0806));
+
+  auto entry = match_action_entry.mutable_action();
+  auto action = entry->mutable_action();
+  action->set_action_id(a_id);
+  {
+    auto param = action->add_params();
+    param->set_param_id(
+        pi_p4info_action_param_id_from_name(p4info, a_id, "qid"));
+    param->set_value(uint_to_string((uint8_t)0));
+    param->set_param_id(
+        pi_p4info_action_param_id_from_name(p4info, a_id, "reason"));
+    param->set_value(uint_to_string(ARP_REASON));
+  }
+
+  rc = add_one_entry(&match_action_entry);
+  return rc;
 }
 
 int TorMgr::set_nexthop_egress_port(uint32_t nhopindex, uint16_t port) {
@@ -462,6 +548,7 @@ TorMgr::set_default_entries() {
       std::cout << "Error when adding entry to 'forward'\n";
   }
 #endif
+  rc = set_arp_punt_();
   return rc;
 }
 

@@ -143,6 +143,11 @@ class TorMgr {
 
   int set_nexthop_egress_port(uint32_t nhopindex, uint16_t port);
 
+  void set_ignore_mask_(p4::TableEntry &entry, std::vector <std::pair<const char *, int>> &fields);
+
+
+  int set_arp_punt_(void);
+
   int add_route_(uint32_t prefix, int pLen, uint32_t nhopIp,
                  uint16_t port, UpdateMode update_mode);
 
