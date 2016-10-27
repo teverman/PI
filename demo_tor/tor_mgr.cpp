@@ -295,22 +295,8 @@ void TorMgr::set_ignore_mask_(p4::TableEntry &entry, std::vector <std::pair<cons
     auto mf = entry.add_match();
     mf->set_field_id(pi_p4info_field_id_from_name(p4info, f.first));
     auto mf_ternary = mf->mutable_ternary();
-    switch(f.second) {
-      case 1:
-        mf_ternary->set_mask(uint_to_string((uint8_t)0xFF));
-        break;
-      case 2:
-        mf_ternary->set_mask(uint_to_string((uint16_t)0xFFFF));
-        break;
-      case 4:
-        mf_ternary->set_mask(uint_to_string((uint32_t)0xFFFFFFFF));
-        break;
-        /*
-      case 16:
-        mf_ternary->set_mask(uint_to_string((uint128_t)0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF));
-        break;
-        */
-    }
+    mf_ternary->set_value(std::string(f.second, 0));
+    mf_ternary->set_mask(std::string(f.second, 0));
   }
 }
 
@@ -324,10 +310,9 @@ int TorMgr::set_arp_punt_(void) {
 
   auto mf = match_action_entry.add_match();
   mf->set_field_id(pi_p4info_field_id_from_name(p4info, "ethernet.etherType"));
-  /*
   auto mf_ternary = mf->mutable_ternary();
-  mf_ternary->set_value(uint_to_string((uint16_t)0x0806));
-  mf_ternary->set_mask(uint_to_string((uint16_t)0xFFFF));
+  mf_ternary->set_value(uint_to_string(static_cast<uint16_t>(0x0806)));
+  mf_ternary->set_mask(uint_to_string(static_cast<uint16_t>(0xFFFF)));
   static std::vector<std::pair<const char *, int>> fields= {
   {"standard_metadata.ingress_port", 2},
   {"standard_metadata.egress_spec", 2}, 
@@ -349,9 +334,6 @@ int TorMgr::set_arp_punt_(void) {
   {"local_metadata.vrf_id" , 4}
 	};
   set_ignore_mask_(match_action_entry, fields);
-  */
-  auto mf_exact = mf->mutable_exact();
-  mf_exact->set_value(uint_to_string((uint16_t)0x0806));
 
   auto entry = match_action_entry.mutable_action();
   auto action = entry->mutable_action();

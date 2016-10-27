@@ -652,8 +652,8 @@ table punt_table {
     standard_metadata.ingress_port: ternary;
     standard_metadata.egress_spec: ternary;
 
-    ethernet.etherType: exact;
-//    ethernet.etherType: ternary;
+//    ethernet.etherType: exact;
+    ethernet.etherType: ternary;
 
     ipv4_base.diffserv: ternary;
     ipv6_base.traffic_class: ternary;
