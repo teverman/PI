@@ -1132,100 +1132,8 @@
             ]
         },
         {
-            "name": "set_queue_and_send_to_cpu",
-            "id": 5,
-            "runtime_data": [
-                {
-                    "name": "qid",
-                    "bitwidth": 5
-                },
-                {
-                    "name": "reason",
-                    "bitwidth": 16
-                }
-            ],
-            "primitives": [
-                {
-                    "op": "modify_field",
-                    "parameters": [
-                        {
-                            "type": "field",
-                            "value": [
-                                "local_metadata",
-                                "qid"
-                            ]
-                        },
-                        {
-                            "type": "runtime_data",
-                            "value": 0
-                        }
-                    ]
-                },
-                {
-                    "op": "add_header",
-                    "parameters": [
-                        {
-                            "type": "header",
-                            "value": "cpu_header"
-                        }
-                    ]
-                },
-                {
-                    "op": "modify_field",
-                    "parameters": [
-                        {
-                            "type": "field",
-                            "value": [
-                                "cpu_header",
-                                "reason"
-                            ]
-                        },
-                        {
-                            "type": "runtime_data",
-                            "value": 1
-                        }
-                    ]
-                },
-                {
-                    "op": "modify_field",
-                    "parameters": [
-                        {
-                            "type": "field",
-                            "value": [
-                                "cpu_header",
-                                "port"
-                            ]
-                        },
-                        {
-                            "type": "field",
-                            "value": [
-                                "standard_metadata",
-                                "ingress_port"
-                            ]
-                        }
-                    ]
-                },
-                {
-                    "op": "modify_field",
-                    "parameters": [
-                        {
-                            "type": "field",
-                            "value": [
-                                "standard_metadata",
-                                "egress_spec"
-                            ]
-                        },
-                        {
-                            "type": "hexstr",
-                            "value": "0x40"
-                        }
-                    ]
-                }
-            ]
-        },
-        {
             "name": "meter_deny",
-            "id": 6,
+            "id": 5,
             "runtime_data": [],
             "primitives": [
                 {
@@ -1236,7 +1144,7 @@
         },
         {
             "name": "set_queue_and_copy_to_cpu",
-            "id": 7,
+            "id": 6,
             "runtime_data": [
                 {
                     "name": "qid",
@@ -1296,70 +1204,8 @@
             ]
         },
         {
-            "name": "l3_egress_port_set",
-            "id": 8,
-            "runtime_data": [
-                {
-                    "name": "port",
-                    "bitwidth": 9
-                }
-            ],
-            "primitives": [
-                {
-                    "op": "modify_field",
-                    "parameters": [
-                        {
-                            "type": "field",
-                            "value": [
-                                "standard_metadata",
-                                "egress_spec"
-                            ]
-                        },
-                        {
-                            "type": "runtime_data",
-                            "value": 0
-                        }
-                    ]
-                }
-            ]
-        },
-        {
-            "name": "nop",
-            "id": 9,
-            "runtime_data": [],
-            "primitives": []
-        },
-        {
-            "name": "l3_forwarding",
-            "id": 10,
-            "runtime_data": [
-                {
-                    "name": "nexthop_index",
-                    "bitwidth": 32
-                }
-            ],
-            "primitives": [
-                {
-                    "op": "modify_field",
-                    "parameters": [
-                        {
-                            "type": "field",
-                            "value": [
-                                "local_metadata",
-                                "nexthop_index"
-                            ]
-                        },
-                        {
-                            "type": "runtime_data",
-                            "value": 0
-                        }
-                    ]
-                }
-            ]
-        },
-        {
             "name": "send_to_cpu",
-            "id": 11,
+            "id": 7,
             "runtime_data": [
                 {
                     "name": "reason",
@@ -1430,8 +1276,168 @@
             ]
         },
         {
-            "name": "drop_packet",
+            "name": "set_queue_and_send_to_cpu",
+            "id": 8,
+            "runtime_data": [
+                {
+                    "name": "qid",
+                    "bitwidth": 5
+                },
+                {
+                    "name": "reason",
+                    "bitwidth": 16
+                }
+            ],
+            "primitives": [
+                {
+                    "op": "modify_field",
+                    "parameters": [
+                        {
+                            "type": "field",
+                            "value": [
+                                "local_metadata",
+                                "qid"
+                            ]
+                        },
+                        {
+                            "type": "runtime_data",
+                            "value": 0
+                        }
+                    ]
+                },
+                {
+                    "op": "add_header",
+                    "parameters": [
+                        {
+                            "type": "header",
+                            "value": "cpu_header"
+                        }
+                    ]
+                },
+                {
+                    "op": "modify_field",
+                    "parameters": [
+                        {
+                            "type": "field",
+                            "value": [
+                                "cpu_header",
+                                "reason"
+                            ]
+                        },
+                        {
+                            "type": "runtime_data",
+                            "value": 1
+                        }
+                    ]
+                },
+                {
+                    "op": "modify_field",
+                    "parameters": [
+                        {
+                            "type": "field",
+                            "value": [
+                                "cpu_header",
+                                "port"
+                            ]
+                        },
+                        {
+                            "type": "field",
+                            "value": [
+                                "standard_metadata",
+                                "ingress_port"
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "op": "modify_field",
+                    "parameters": [
+                        {
+                            "type": "field",
+                            "value": [
+                                "standard_metadata",
+                                "egress_spec"
+                            ]
+                        },
+                        {
+                            "type": "hexstr",
+                            "value": "0x40"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "l3_egress_port_set",
+            "id": 9,
+            "runtime_data": [
+                {
+                    "name": "port",
+                    "bitwidth": 9
+                }
+            ],
+            "primitives": [
+                {
+                    "op": "modify_field",
+                    "parameters": [
+                        {
+                            "type": "field",
+                            "value": [
+                                "standard_metadata",
+                                "egress_spec"
+                            ]
+                        },
+                        {
+                            "type": "runtime_data",
+                            "value": 0
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "meter_permit",
+            "id": 10,
+            "runtime_data": [],
+            "primitives": []
+        },
+        {
+            "name": "nop",
+            "id": 11,
+            "runtime_data": [],
+            "primitives": []
+        },
+        {
+            "name": "l3_forwarding",
             "id": 12,
+            "runtime_data": [
+                {
+                    "name": "nexthop_index",
+                    "bitwidth": 32
+                }
+            ],
+            "primitives": [
+                {
+                    "op": "modify_field",
+                    "parameters": [
+                        {
+                            "type": "field",
+                            "value": [
+                                "local_metadata",
+                                "nexthop_index"
+                            ]
+                        },
+                        {
+                            "type": "runtime_data",
+                            "value": 0
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "drop_packet",
+            "id": 13,
             "runtime_data": [],
             "primitives": [
                 {
@@ -1439,12 +1445,6 @@
                     "parameters": []
                 }
             ]
-        },
-        {
-            "name": "meter_permit",
-            "id": 13,
-            "runtime_data": [],
-            "primitives": []
         },
         {
             "name": "rewrite_mac",
@@ -1683,7 +1683,7 @@
                         "drop_packet": "_condition_1"
                     },
                     "default_entry": {
-                        "action_id": 12,
+                        "action_id": 13,
                         "action_const": true,
                         "action_data": [],
                         "action_entry_const": false
@@ -1717,7 +1717,7 @@
                         "__MISS__": "l3_ipv4_vrf_table"
                     },
                     "default_entry": {
-                        "action_id": 10,
+                        "action_id": 12,
                         "action_const": true,
                         "action_data": [
                             "0x0"
@@ -1762,7 +1762,7 @@
                         "__MISS__": "l3_ipv4_fallback_table"
                     },
                     "default_entry": {
-                        "action_id": 10,
+                        "action_id": 12,
                         "action_const": true,
                         "action_data": [
                             "0x0"
@@ -1797,7 +1797,7 @@
                         "l3_forwarding": "l3_ipv4_nexthop_resolve"
                     },
                     "default_entry": {
-                        "action_id": 10,
+                        "action_id": 12,
                         "action_const": true,
                         "action_data": [
                             "0x0"
@@ -1834,7 +1834,7 @@
                         "send_to_cpu": "ingress_nexthop_table"
                     },
                     "default_entry": {
-                        "action_id": 11,
+                        "action_id": 7,
                         "action_const": true,
                         "action_data": [
                             "0x0"
@@ -1870,7 +1870,7 @@
                         "__MISS__": "l3_ipv6_vrf_table"
                     },
                     "default_entry": {
-                        "action_id": 10,
+                        "action_id": 12,
                         "action_const": true,
                         "action_data": [
                             "0x0"
@@ -1914,7 +1914,7 @@
                         "__MISS__": "l3_ipv6_fallback_table"
                     },
                     "default_entry": {
-                        "action_id": 10,
+                        "action_id": 12,
                         "action_const": true,
                         "action_data": [
                             "0x0"
@@ -1949,7 +1949,7 @@
                         "l3_forwarding": "l3_ipv6_nexthop_resolve"
                     },
                     "default_entry": {
-                        "action_id": 10,
+                        "action_id": 12,
                         "action_const": true,
                         "action_data": [
                             "0x0"
@@ -1986,7 +1986,7 @@
                         "send_to_cpu": "ingress_nexthop_table"
                     },
                     "default_entry": {
-                        "action_id": 11,
+                        "action_id": 7,
                         "action_const": true,
                         "action_data": [
                             "0x0"
@@ -2023,7 +2023,7 @@
                         "send_to_cpu": "punt_table"
                     },
                     "default_entry": {
-                        "action_id": 11,
+                        "action_id": 7,
                         "action_const": true,
                         "action_data": [
                             "0x0"
@@ -2205,7 +2205,7 @@
                         "__MISS__": null
                     },
                     "default_entry": {
-                        "action_id": 9,
+                        "action_id": 11,
                         "action_const": true,
                         "action_data": [],
                         "action_entry_const": false
@@ -2430,7 +2430,7 @@
                         "drop_packet": null
                     },
                     "default_entry": {
-                        "action_id": 12,
+                        "action_id": 13,
                         "action_const": true,
                         "action_data": [],
                         "action_entry_const": false
