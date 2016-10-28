@@ -24,15 +24,11 @@
 
 #include <stdio.h>
 
-typedef struct {
-  Pvoid_t array;
-} func_counter_t;
+typedef struct { Pvoid_t array; } func_counter_t;
 
 static func_counter_t func_counter;
 
-void func_counter_init() {
-  func_counter.array = (Pvoid_t)NULL;
-}
+void func_counter_init() { func_counter.array = (Pvoid_t)NULL; }
 
 void func_counter_increment(const char *func_name) {
 #ifdef DEBUG
@@ -68,7 +64,7 @@ void func_counter_destroy() {
   Word_t bytes_freed = 0;
 #pragma GCC diagnostic push
 #pragma GCC diagnostic warning "-Wsign-compare"
-  JLFA(bytes_freed, func_counter.array);
+  JSLFA(bytes_freed, func_counter.array);
 #pragma GCC diagnostic pop
   (void)bytes_freed;
 }
