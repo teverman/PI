@@ -165,6 +165,7 @@ header_type local_metadata_t {
     icmp_code: 8;
     reason: 8;
     src_mac: 48;
+    lag_group_id: 32;
   }
 }
 
@@ -430,13 +431,10 @@ action l3_set_ecmp_group(nexthop_group_id) {
   modify_field(local_metadata.nexthop_group_id, nexthop_group_id);
 }
 
-action l3_egress_port_set(port) {
-  modify_field(standard_metadata.egress_spec, port);
-}
-
 action l3_forwarding(nexthop_index) {
   modify_field(local_metadata.nexthop_index, nexthop_index);
 }
+
 //-----------------------------------
 // IPv4 L3 Forwarding
 //-----------------------------------
@@ -448,7 +446,7 @@ table l3_ipv4_override_table {
   }
   actions {
     l3_forwarding;
-//    l3_set_ecmp_group;
+    l3_set_ecmp_group;
   }
   default_action: l3_forwarding(0);
 }
@@ -461,7 +459,7 @@ table l3_ipv4_vrf_table {
   actions {
 nop;
     l3_forwarding;
-//    l3_set_ecmp_group;
+    l3_set_ecmp_group;
   }
   default_action: l3_forwarding(0);
 }
@@ -472,21 +470,10 @@ table l3_ipv4_fallback_table {
   }
   actions {
     l3_forwarding;
-//    l3_set_ecmp_group;
+    l3_set_ecmp_group;
   }
   default_action: l3_forwarding(0);
 }
-
-table l3_ipv4_nexthop_resolve {
-  reads {
-    local_metadata.nexthop_index : exact;
-  }
-  actions {
-    l3_egress_port_set;
-  }
-  default_action: send_to_cpu(0);
-}
-
 
 // LPM forwarding for IPV4 packets.
 control ingress_ipv4_l3_forwarding {
@@ -499,7 +486,6 @@ control ingress_ipv4_l3_forwarding {
       }
     }
   }
-  apply(l3_ipv4_nexthop_resolve);
 }
 
 //-----------------------------------
@@ -514,6 +500,7 @@ table l3_ipv6_override_table {
   actions {
     // L3 forwarding on a match.
     l3_forwarding;
+    l3_set_ecmp_group;
   }
   default_action: l3_forwarding(0);
 }
@@ -525,6 +512,7 @@ table l3_ipv6_vrf_table {
   }
   actions {
     l3_forwarding;
+    l3_set_ecmp_group;
   }
   default_action: l3_forwarding(0);
 }
@@ -535,16 +523,123 @@ table l3_ipv6_fallback_table {
   }
   actions {
     l3_forwarding;
+    l3_set_ecmp_group;
   }
   default_action: l3_forwarding(0);
 }
 
-table l3_ipv6_nexthop_resolve {
+
+//-----------------------------------
+// L3 ECMP nexthop selection
+//-----------------------------------
+
+// TODO get complete list of l3 hash fields v4/v6
+field_list l3_ipv6_hash_fields {
+  ipv6_base.dstAddr;
+  ipv6_base.srcAddr;
+  ipv6_base.flowLabel;
+  local_metadata.l4SrcPort;
+  local_metadata.l4DstPort;
+}
+
+field_list l3_ipv4_hash_fields {
+  ipv4_base.dstAddr;
+  ipv4_base.srcAddr;
+  ipv4_base.protocol;
+  local_metadata.l4SrcPort;
+  local_metadata.l4DstPort;
+}
+
+field_list_calculation ecmp_hash {
+    input {
+        l3_ipv4_hash_fields;
+    }
+    algorithm : crc16;
+    output_width : 14;
+}
+
+action_selector ecmp_selector {
+    selection_key : ecmp_hash;
+    selection_mode : fair;
+}
+
+action set_ecmp_nexthop(nexthop_index) {
+  modify_field(local_metadata.nexthop_index, nexthop_index);
+}
+
+action_profile ecmp_action_profile {
+  actions {
+    set_ecmp_nexthop;
+  }
+  dynamic_action_selection: ecmp_selector;
+}
+
+table l3_ecmp_resolve {
+  reads {
+    local_metadata.nexthop_group_id: exact;
+  }
+  action_profile: ecmp_action_profile;
+}
+
+
+//-----------------------------------
+// LAG egress port selection
+//-----------------------------------
+
+field_list lag_hash_fields {
+  ethernet.dstAddr;
+  ethernet.srcAddr;
+  ethernet.etherType;
+  standard_metadata.ingress_port;
+}
+
+field_list_calculation lag_hash {
+    input {
+        lag_hash_fields;
+    }
+    algorithm : crc16;
+    output_width : 14;
+}
+
+action_selector lag_selector {
+    selection_key : lag_hash;
+    selection_mode : fair;
+}
+
+action set_lag_egress_port(port) {
+  modify_field(standard_metadata.egress_spec, port);
+}
+
+action_profile lag_action_profile {
+  actions {
+    set_lag_egress_port;
+  }
+  dynamic_action_selection: lag_selector;
+}
+
+table lag_resolve {
+  reads {
+    local_metadata.lag_group_id: exact;
+  }
+  action_profile: lag_action_profile;
+}
+
+
+action l3_egress_port_set(port) {
+  modify_field(standard_metadata.egress_spec, port);
+}
+
+action l3_egress_lag_set(lag) {
+  modify_field(local_metadata.lag_group_id, lag);
+}
+
+table l3_nexthop_resolve {
   reads {
     local_metadata.nexthop_index : exact;
   }
   actions {
     l3_egress_port_set;
+    l3_egress_lag_set;
   }
   default_action: send_to_cpu(0);
 }
@@ -560,7 +655,6 @@ control ingress_ipv6_l3_forwarding {
       }
     }
   }
-  apply(l3_ipv6_nexthop_resolve);
 }
 
 //-----------------------------------
@@ -575,6 +669,14 @@ control ingress_lpm_forwarding {
     if (valid(ipv6_base)) {
       ingress_ipv6_l3_forwarding();
     }
+  }
+  if(local_metadata.nexthop_group_id == 0) {
+    apply(l3_nexthop_resolve);
+  } else {
+    apply(l3_ecmp_resolve);
+  }
+  if(local_metadata.lag_group_id != 0) {
+    apply(lag_resolve);
   }
 }
 
