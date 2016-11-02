@@ -354,7 +354,7 @@ int TorMgr::set_arp_punt_(void) {
 
 int TorMgr::set_nexthop_egress_port(uint32_t nhopindex, uint16_t port) {
   int rc = 0;
-  pi_p4_id_t t_id = pi_p4info_table_id_from_name(p4info, "l3_ipv4_nexthop_resolve");
+  pi_p4_id_t t_id = pi_p4info_table_id_from_name(p4info, "l3_nexthop_resolve");
   pi_p4_id_t a_id = pi_p4info_action_id_from_name(p4info, "l3_egress_port_set");
 
   p4::TableEntry match_action_entry;
