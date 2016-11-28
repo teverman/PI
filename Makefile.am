@@ -8,15 +8,12 @@ if WITH_PROTO
 MAYBE_PROTO = proto
 endif
 
-if WITH_PROTO_DEMO
-MAYBE_PROTO_DEMO = demo_grpc demo_tor
-endif
-
 # examples need to come after generators!
+# proto depends on frontends_extra/cpp!
 SUBDIRS = third_party lib include src generators targets $(MAYBE_CLI) examples \
-bin tests $(MAYBE_PROTO) frontends_extra $(MAYBE_PROTO_DEMO)
+bin tests frontends_extra $(MAYBE_PROTO)
 
 DIST_SUBDIRS = third_party lib include src generators targets CLI examples \
-bin tests $(MAYBE_PROTO) frontends_extra demo_grpc
+bin tests frontends_extra $(MAYBE_PROTO)
 
 AM_DISTCHECK_CONFIGURE_FLAGS = --with-bmv2 --with-fe-cpp

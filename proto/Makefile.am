@@ -1,44 +1,91 @@
 ACLOCAL_AMFLAGS = ${ACLOCAL_FLAGS} -I m4
 
-PROTOFLAGS = -I.
+# Remove -Werror
+AM_CXXFLAGS =
+
+if WITH_PROTO_DEMO
+MAYBE_PROTO_DEMO = demo_grpc demo_tor
+endif
+
+SUBDIRS = . p4info frontend $(MAYBE_PROTO_DEMO) tests
+
+PROTOFLAGS = -I$(abs_srcdir)
 
 # This makefile relies on the symbolic link that we create google ->
 # googleapis/google. Without it, we run into some issues with `protoc`. An
 # alternative would be to cd into googleapis when compiling the protos there; we
 # will switch to that alternative if the need arises.
 
+# Absolute paths are needed here for 'make distcheck' to work properly
 protos = \
-$(srcdir)/pi.proto \
-$(srcdir)/google/rpc/status.proto \
-$(srcdir)/google/rpc/code.proto \
-$(srcdir)/device.proto \
-$(srcdir)/resource.proto
+$(abs_srcdir)/p4/pi.proto \
+$(abs_srcdir)/p4/config/p4info.proto \
+$(abs_srcdir)/google/rpc/status.proto \
+$(abs_srcdir)/google/rpc/code.proto \
+$(abs_srcdir)/p4/tmp/device.proto \
+$(abs_srcdir)/p4/tmp/resource.proto
 
-EXTRA_DIST = $(protos)
+# Somehow, using an absolute path above prevents me from using EXTRA_DIST =
+# $(protos)
+EXTRA_DIST = \
+p4/pi.proto \
+p4/config/p4info.proto \
+google/rpc/status.proto \
+google/rpc/code.proto \
+p4/tmp/device.proto \
+p4/tmp/resource.proto
 
 proto_cpp_files = \
-cpp_out/pi.pb.cc \
-cpp_out/pi.pb.h \
+cpp_out/p4/pi.pb.cc \
+cpp_out/p4/pi.pb.h \
+cpp_out/p4/config/p4info.pb.cc \
+cpp_out/p4/config/p4info.pb.h \
 cpp_out/google/rpc/status.pb.cc \
 cpp_out/google/rpc/status.pb.h \
 cpp_out/google/rpc/code.pb.cc \
 cpp_out/google/rpc/code.pb.h \
-cpp_out/device.pb.cc \
-cpp_out/device.pb.h \
-cpp_out/resource.pb.cc \
-cpp_out/resource.pb.h
+cpp_out/p4/tmp/device.pb.cc \
+cpp_out/p4/tmp/device.pb.h \
+cpp_out/p4/tmp/resource.pb.cc \
+cpp_out/p4/tmp/resource.pb.h
 
 proto_grpc_files = \
-grpc_out/pi.grpc.pb.cc \
-grpc_out/pi.grpc.pb.h \
+grpc_out/p4/pi.grpc.pb.cc \
+grpc_out/p4/pi.grpc.pb.h \
+grpc_out/p4/config/p4info.grpc.pb.cc \
+grpc_out/p4/config/p4info.grpc.pb.h \
 grpc_out/google/rpc/status.grpc.pb.cc \
 grpc_out/google/rpc/status.grpc.pb.h \
 grpc_out/google/rpc/code.grpc.pb.cc \
 grpc_out/google/rpc/code.grpc.pb.h \
-grpc_out/device.grpc.pb.cc \
-grpc_out/device.grpc.pb.h \
-grpc_out/resource.grpc.pb.cc \
-grpc_out/resource.grpc.pb.h
+grpc_out/p4/tmp/device.grpc.pb.cc \
+grpc_out/p4/tmp/device.grpc.pb.h \
+grpc_out/p4/tmp/resource.grpc.pb.cc \
+grpc_out/p4/tmp/resource.grpc.pb.h
+
+includep4dir = $(includedir)/p4/
+nodist_includep4_HEADERS = \
+cpp_out/p4/pi.pb.h \
+grpc_out/p4/pi.grpc.pb.h
+
+includep4configdir = $(includedir)/p4/config/
+nodist_includep4config_HEADERS = \
+cpp_out/p4/config/p4info.pb.h \
+grpc_out/p4/config/p4info.grpc.pb.h
+
+includep4tmpdir = $(includedir)/p4/tmp/
+nodist_includep4tmp_HEADERS = \
+cpp_out/p4/tmp/device.pb.h \
+cpp_out/p4/tmp/resource.pb.h \
+grpc_out/p4/tmp/device.grpc.pb.h \
+grpc_out/p4/tmp/resource.grpc.pb.h
+
+includegoogledir = $(includedir)/google/rpc/
+nodist_includegoogle_HEADERS = \
+cpp_out/google/rpc/status.pb.h \
+cpp_out/google/rpc/code.pb.h \
+grpc_out/google/rpc/status.grpc.pb.h \
+grpc_out/google/rpc/code.grpc.pb.h
 
 AM_CPPFLAGS = -Icpp_out -Igrpc_out
 
@@ -75,9 +122,8 @@ $(BUILT_SOURCES): proto_files.ts
 	  fi; \
 	fi
 
-# very likely to change in the future; for now the goal is just to have a
-# skeleton makefile which compiles the generated source files.
-noinst_LTLIBRARIES = libpiproto.la
+# is this the best name for this library, or is this too generic?
+lib_LTLIBRARIES = libpiproto.la
 
 # generated source should not be distributed
 nodist_libpiproto_la_SOURCES = \

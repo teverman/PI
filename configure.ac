@@ -46,6 +46,12 @@ AM_CONDITIONAL([WITH_PROTO], [test "$with_proto" = yes])
 # may add other conditions later for GTEST to be compiled if we use GTEST
 # somewhere else
 AM_CONDITIONAL([WITH_GTEST], [test "$with_proto" = yes])
+AM_COND_IF([WITH_GTEST], [
+    gtest_root=$ac_abs_confdir/third_party/googletest
+    gtest_check_f=$gtest_root/googletest/src/gtest.cc
+    AC_CHECK_FILE([$gtest_check_f], [],
+                  [AC_MSG_ERROR([Did you run 'git submodule update --init'?])])
+])
 
 AC_ARG_WITH([internal-rpc],
     AS_HELP_STRING([--with-internal-rpc],
@@ -59,18 +65,6 @@ AC_ARG_WITH([cli],
     [with_cli="$withval"], [with_cli=yes])
 
 AM_CONDITIONAL([WITH_CLI], [test "$with_cli" = yes])
-
-with_proto_demo=no
-AS_IF([test "$with_proto" = yes && test "$want_bmv2" = yes], [
-    with_proto_demo=yes
-    AC_CHECK_LIB([microhttpd], [MHD_start_daemon], [], [
-        AC_MSG_WARN([microhttpd library not found, will not compile demo])
-        with_proto_demo=no
-    ])
-    # TODO(antonin): demo also uses boost_system
-])
-
-AM_CONDITIONAL([WITH_PROTO_DEMO], [test "$with_proto_demo" = yes])
 
 LT_INIT
 
@@ -167,8 +161,6 @@ AC_CONFIG_FILES([Makefile
                  generators/pd/Makefile
                  include/Makefile
                  lib/Makefile
-                 demo_grpc/Makefile
-                 demo_tor/Makefile
                  src/Makefile
                  targets/Makefile
                  targets/dummy/Makefile
@@ -187,9 +179,7 @@ AM_COND_IF([WITH_CLI_TESTS],
            AC_CONFIG_FILES([tests/CLI/run_one_test.py],
                            [chmod +x tests/CLI/run_one_test.py]))
 AS_IF([test "$with_proto" = yes], [
-  AX_CXX_COMPILE_STDCXX_11([noext],[mandatory])
   AC_CONFIG_SUBDIRS([proto])
-  AC_CONFIG_FILES([frontends_extra/proto/Makefile])
 ])
 
 AC_OUTPUT

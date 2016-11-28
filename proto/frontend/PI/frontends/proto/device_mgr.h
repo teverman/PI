@@ -21,15 +21,16 @@
 #ifndef PI_FRONTENDS_PROTO_DEVICE_MGR_H_
 #define PI_FRONTENDS_PROTO_DEVICE_MGR_H_
 
-#include "google/rpc/status.pb.h"
-#include "pi.pb.h"
-#include "device.pb.h"
-#include "resource.pb.h"
-
 #include <functional>
 #include <memory>
 #include <string>
 #include <vector>
+
+#include "google/rpc/status.pb.h"
+#include "p4/pi.pb.h"
+#include "p4/config/p4info.pb.h"
+#include "p4/tmp/device.pb.h"
+#include "p4/tmp/resource.pb.h"
 
 namespace pi {
 
@@ -50,16 +51,16 @@ class DeviceMgr {
   using PacketInCb =
       std::function<void(device_id_t, std::string packet, void *cookie)>;
 
-  DeviceMgr(device_id_t device_id);
+  explicit DeviceMgr(device_id_t device_id);
 
   ~DeviceMgr();
 
   // 3 temporary methods to manage a device, will be replaced by permanent
   // solution ASAP
-  Status init(const std::string &p4info_json,
-              const p4tmp::DeviceAssignRequest_Extras &extras);
+  Status init(const p4::config::P4Info &p4info,
+              const p4::tmp::DeviceAssignRequest_Extras &extras);
 
-  Status update_start(const std::string &p4info_json,
+  Status update_start(const p4::config::P4Info &p4info,
                       const std::string &device_data);
 
   Status update_end();
@@ -85,11 +86,11 @@ class DeviceMgr {
 
   void packet_in_register_cb(PacketInCb cb, void *cookie);
 
-  Status counter_write(const p4tmp::CounterEntry &entry);
+  Status counter_write(const p4::tmp::CounterEntry &entry);
 
   // this function does not clear the entries, instead it appends to it
   Status counter_read(p4_id_t counter_id,
-                      p4tmp::CounterReadResponse *entries) const;
+                      p4::tmp::CounterReadResponse *entries) const;
 
   static void init(size_t max_devices);
 
