@@ -65,6 +65,7 @@ AC_CONFIG_FILES([Makefile
                  p4info/Makefile
                  frontend/Makefile
                  demo_grpc/Makefile
+                 demo_tor/Makefile
                  tests/Makefile])
 
 AC_OUTPUT
@@ -72,3 +73,4 @@ AC_OUTPUT
 AS_ECHO("")
 AS_ECHO("Features recap ......................................")
 AS_ECHO("Compile demo_grpc ............................ : $with_proto_demo")
+AS_ECHO("Compile demo_tor  ............................ : $with_proto_demo")

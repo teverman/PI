@@ -10,9 +10,9 @@
 
 #include <grpc++/grpc++.h>
 
-#include "pi.grpc.pb.h"
-#include "device.grpc.pb.h"
-#include "resource.grpc.pb.h"
+#include "p4/pi.grpc.pb.h"
+#include "p4/tmp/device.grpc.pb.h"
+#include "p4/tmp/resource.grpc.pb.h"
 #include "google/rpc/code.pb.h"
 
 using grpc::Server;
@@ -50,22 +50,22 @@ void packet_in_cb(DeviceMgr::device_id_t device_id, std::string packet,
 
 }  // namespace
 
-class DeviceService : public p4tmp::Device::Service {
+class DeviceService : public p4::tmp::Device::Service {
  private:
   Status DeviceAssign(ServerContext *context,
-                      const p4tmp::DeviceAssignRequest *request,
+                      const p4::tmp::DeviceAssignRequest *request,
                       ::google::rpc::Status *rep) override {
     SIMPLELOG << "PI DeviceAssign\n";
     SIMPLELOG << request->DebugString();
     device_mgr = new DeviceMgr(request->device_id());
-    *rep = device_mgr->init(request->native_p4info_json(), request->extras());
+    *rep = device_mgr->init(request->p4info(), request->extras());
     device_mgr->packet_in_register_cb(::packet_in_cb,
                                       static_cast<void *>(packet_in_mgr));
     return Status::OK;
   }
 
   Status DeviceRemove(ServerContext *context,
-                      const p4tmp::DeviceRemoveRequest *request,
+                      const p4::tmp::DeviceRemoveRequest *request,
                       ::google::rpc::Status *rep) override {
     SIMPLELOG << "PI DeviceRemove\n";
     SIMPLELOG << request->DebugString();
@@ -75,17 +75,16 @@ class DeviceService : public p4tmp::Device::Service {
   }
 
   Status DeviceUpdateStart(ServerContext *context,
-                           const p4tmp::DeviceUpdateStartRequest *request,
+                           const p4::tmp::DeviceUpdateStartRequest *request,
                            ::google::rpc::Status *rep) override {
     SIMPLELOG << "PI DeviceUpdateStart\n";
     SIMPLELOG << request->DebugString();
-    *rep = device_mgr->update_start(request->native_p4info_json(),
-                                    request->device_data());
+    *rep = device_mgr->update_start(request->p4info(), request->device_data());
     return Status::OK;
   }
 
   Status DeviceUpdateEnd(ServerContext *context,
-                         const p4tmp::DeviceUpdateEndRequest *request,
+                         const p4::tmp::DeviceUpdateEndRequest *request,
                          ::google::rpc::Status *rep) override {
     SIMPLELOG << "PI DeviceUpdateEnd\n";
     SIMPLELOG << request->DebugString();
@@ -94,11 +93,11 @@ class DeviceService : public p4tmp::Device::Service {
   }
 };
 
-class ResourceService : public p4tmp::Resource::Service {
+class ResourceService : public p4::tmp::Resource::Service {
  private:
   Status CounterRead(ServerContext *context,
-                     const p4tmp::CounterReadRequest *request,
-                     p4tmp::CounterReadResponse *rep) override {
+                     const p4::tmp::CounterReadRequest *request,
+                     p4::tmp::CounterReadResponse *rep) override {
     SIMPLELOG << "PI CounterRead\n";
     SIMPLELOG << request->DebugString();
     for (const auto counter_id : request->counter_ids()) {
@@ -108,8 +107,8 @@ class ResourceService : public p4tmp::Resource::Service {
   }
 
   Status CounterWrite(ServerContext *context,
-                      const p4tmp::CounterWriteRequest *request,
-                      p4tmp::CounterWriteResponse *rep) override {
+                      const p4::tmp::CounterWriteRequest *request,
+                      p4::tmp::CounterWriteResponse *rep) override {
     SIMPLELOG << "PI CounterWrite\n";
     SIMPLELOG << request->DebugString();
     bool has_error = false;

@@ -11,8 +11,10 @@
 
 #include <grpc++/grpc++.h>
 
-#include "pi.grpc.pb.h"
-#include "device.grpc.pb.h"
+#include "p4info_to_and_from_proto.h"  // for p4info_serialize_to_proto
+
+#include "p4/pi.grpc.pb.h"
+#include "p4/tmp/device.grpc.pb.h"
 
 using grpc::Channel;
 using grpc::ClientContext;
@@ -83,16 +85,16 @@ int parse_opts(int argc, char *const argv[]) {
 class DeviceClient {
  public:
   DeviceClient(std::shared_ptr<Channel> channel)
-      : stub_(p4tmp::Device::NewStub(channel)) {}
+      : stub_(p4::tmp::Device::NewStub(channel)) {}
 
   int assign_device(const char *path) {
-    p4tmp::DeviceAssignRequest request;
+    p4::tmp::DeviceAssignRequest request;
     request.set_device_id(0);
     pi_p4info_t *p4info;
     pi_add_config_from_file(path, PI_CONFIG_TYPE_BMV2_JSON, &p4info);
     p4infos[0] = p4info;
-    char *p4info_json = pi_serialize_config(p4info, 0);
-    request.set_native_p4info_json(std::string(p4info_json));
+    auto p4info_proto = pi::p4info::p4info_serialize_to_proto(p4info);
+    request.set_allocated_p4info(&p4info_proto);
     auto extras = request.mutable_extras();
     auto kv = extras->mutable_kv();
     (*kv)["port"] = "9090";
@@ -102,12 +104,13 @@ class DeviceClient {
     ::google::rpc::Status rep;
     ClientContext context;
     Status status = stub_->DeviceAssign(&context, request, &rep);
+    request.release_p4info();
     assert(status.ok());
     return rep.code();
   }
 
  private:
-  std::unique_ptr<p4tmp::Device::Stub> stub_;
+  std::unique_ptr<p4::tmp::Device::Stub> stub_;
   std::unordered_map<int, const pi_p4info_t *> p4infos{};
 };
 
