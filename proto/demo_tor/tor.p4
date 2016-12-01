@@ -141,7 +141,7 @@ header_type cpu_header_t {
   fields {
     zeros : 64;
     reason : 16;
-    port : 16;
+    ingress_port : 16;
   }
 }
 
@@ -154,14 +154,14 @@ header_type local_metadata_t {
   fields {
     // VRF id assigned to the packet. Every packet should have a valid VRF id.
     vrf_id : 32;
-    nexthop_index: 32;
-    nexthop_group_id: 32;
+    class_id: 8;  // Dst traffic class ID (IPSP)
+    qid: 5;  // CPU COS queue ID
+    ingress_meter_index: 16;  // per-port ingress rate-limiting (IPSP)
+    color: 2;
     l4SrcPort: 16;
     l4DstPort: 16;
-    class_id: 8;
-    qid: 5;
-    meter_index: 16;
-    color: 2;
+    nexthop_index: 32;
+    nexthop_group_id: 32;
     icmp_code: 8;
     reason: 8;
     src_mac: 48;
@@ -725,7 +725,7 @@ table ingress_nexthop_table {
 action send_to_cpu(reason) {
   add_header(cpu_header);
   modify_field(cpu_header.reason, reason);
-  modify_field(cpu_header.port, standard_metadata.ingress_port);
+  modify_field(cpu_header.ingress_port, standard_metadata.ingress_port);
   send_packet_to_cpu();
 }
 
@@ -788,7 +788,7 @@ table punt_table {
 //------------------------------------------------------------------------------
 
 action set_egress_port_and_decap_cpu_header() {
-  modify_field(standard_metadata.egress_spec, cpu_header.port);
+  modify_field(standard_metadata.egress_spec, cpu_header.ingress_port);
   remove_header(cpu_header);
 }
 
@@ -817,7 +817,7 @@ meter meter_table {
 //-----------------------------------
 
 action set_meter_index(meter_index) {
-  modify_field(local_metadata.meter_index, meter_index);
+  modify_field(local_metadata.ingress_meter_index, meter_index);
   execute_meter(meter_table, meter_index, local_metadata.color);
 }
 
@@ -861,7 +861,7 @@ action meter_permit() {
 table ingress_port_meter_action {
   reads {
     local_metadata.color : exact;
-    local_metadata.meter_index : exact;
+    local_metadata.ingress_meter_index : exact;
   }
 
   actions {
