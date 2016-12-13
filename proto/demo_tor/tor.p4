@@ -9,6 +9,7 @@
 //------------------------------------------------------------------------------
 
 #define CPU_PORT 64
+#define INITIAL_PACKET_OFFSET 64
 
 #define ARP_REASON 1
 
@@ -27,7 +28,6 @@
 #define DEFAULT_VRF0 0
 
 #define L2_VLAN 4050
-
 #define VLAN_DEPTH 2
 
 #define CPU_MIRROR_SESSION_ID 1024
@@ -141,7 +141,7 @@ header_type cpu_header_t {
   fields {
     zeros : 64;
     reason : 16;
-    ingress_port : 16;
+    ingress_port : 32;
   }
 }
 
@@ -152,7 +152,6 @@ header_type cpu_header_t {
 // Local meta-data for each packet being processed.
 header_type local_metadata_t {
   fields {
-    // VRF id assigned to the packet. Every packet should have a valid VRF id.
     vrf_id : 32;
     class_id: 8;  // Dst traffic class ID (IPSP)
     qid: 5;  // CPU COS queue ID
@@ -163,7 +162,7 @@ header_type local_metadata_t {
     nexthop_index: 32;
     nexthop_group_id: 32;
     icmp_code: 8;
-    reason: 8;
+    reason: 8; // Reason to drop to CPU
     src_mac: 48;
     lag_group_id: 32;
   }
@@ -198,7 +197,7 @@ metadata local_metadata_t local_metadata;
 
 // Start with ethernet always.
 parser start {
-  return select(current(0, 64)) {
+  return select(current(0, INITIAL_PACKET_OFFSET)) {
     0 :      parse_cpu_header;
     default: parse_ethernet;
   }
@@ -346,10 +345,6 @@ table port_properties {
 // Packet Classification
 //------------------------------------------------------------------------------
 
-//-----------------------------------
-// Map traffic to a particular class
-//-----------------------------------
-
 action set_class_id(class_id) {
   modify_field(local_metadata.class_id, class_id);
 }
@@ -361,7 +356,7 @@ table class_id_assignment {
     ipv4_base.ttl: ternary;
     ipv6_base.hopLimit: ternary;
     ipv4_base.dstAddr: ternary;
-    ipv6_base.dstAddr mask 0xFFFFFFFFFFFFFFFF: ternary;
+    ipv6_base.dstAddr: ternary;
     ipv4_base.protocol: exact;
     ipv6_base.nextHeader: exact;
 
@@ -381,7 +376,6 @@ table class_id_assignment {
 // Map traffic to a particular VRF
 //-----------------------------------
 
-// Sets the vrf id on the local metadata.
 action set_vrf(vrf_id) {
   modify_field(local_metadata.vrf_id, vrf_id);
 }
@@ -398,12 +392,6 @@ table vrf_classifier_table {
     set_vrf;
   }
   default_action: set_vrf(DEFAULT_VRF0);
-}
-
-// Controls Packet Classification including IP Spoofing
-control ingress_pkt_classifier {
-  apply(class_id_assignment);
-  apply(vrf_classifier_table);
 }
 
 //------------------------------------------------------------------------------
@@ -439,7 +427,6 @@ action l3_forwarding(nexthop_index) {
 // IPv4 L3 Forwarding
 //-----------------------------------
 
-// Perform override L3 forwarding based destination addr.
 table l3_ipv4_override_table {
   reads {
     ipv4_base.dstAddr : lpm;
@@ -448,7 +435,6 @@ table l3_ipv4_override_table {
     l3_forwarding;
     l3_set_ecmp_group;
   }
-  default_action: l3_forwarding(0);
 }
 
 table l3_ipv4_vrf_table {
@@ -457,11 +443,9 @@ table l3_ipv4_vrf_table {
     ipv4_base.dstAddr : lpm;
   }
   actions {
-nop;
     l3_forwarding;
     l3_set_ecmp_group;
   }
-  default_action: l3_forwarding(0);
 }
 
 table l3_ipv4_fallback_table {
@@ -492,17 +476,14 @@ control ingress_ipv4_l3_forwarding {
 // IPv6 L3 Forwarding
 //-----------------------------------
 
-// Perform override L3 forwarding based destination addr.
 table l3_ipv6_override_table {
   reads {
     ipv6_base.dstAddr : lpm;
   }
   actions {
-    // L3 forwarding on a match.
     l3_forwarding;
     l3_set_ecmp_group;
   }
-  default_action: l3_forwarding(0);
 }
 
 table l3_ipv6_vrf_table {
@@ -514,7 +495,6 @@ table l3_ipv6_vrf_table {
     l3_forwarding;
     l3_set_ecmp_group;
   }
-  default_action: l3_forwarding(0);
 }
 
 table l3_ipv6_fallback_table {
@@ -762,8 +742,8 @@ table punt_table {
     ipv6_base.hopLimit: ternary;
     ipv4_base.srcAddr: ternary;
     ipv4_base.dstAddr: ternary;
-    ipv6_base.srcAddr mask 0xFFFFFFFFFFFFFFFF: ternary;
-    ipv6_base.dstAddr mask 0xFFFFFFFFFFFFFFFF: ternary;
+    ipv6_base.srcAddr: ternary;
+    ipv6_base.dstAddr: ternary;
     ipv4_base.protocol: ternary;
     ipv6_base.nextHeader: ternary;
 
@@ -898,7 +878,8 @@ control ingress {
   if (valid(cpu_header)) {
     apply(process_cpu_header);
   } else {
-    ingress_pkt_classifier();
+    apply(class_id_assignment);
+    apply(vrf_classifier_table);
     apply(l3_routing_classifier);
     ingress_lpm_forwarding();
     if(valid(ipv4_base) or valid(ipv6_base)) {
