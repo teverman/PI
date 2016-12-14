@@ -415,14 +415,6 @@ table l3_routing_classifier {
 // IPv4 and IPv6 L3 Forwarding
 //------------------------------------------------------------------------------
 
-action l3_set_ecmp_group(nexthop_group_id) {
-  modify_field(local_metadata.nexthop_group_id, nexthop_group_id);
-}
-
-action l3_forwarding(nexthop_index) {
-  modify_field(local_metadata.nexthop_index, nexthop_index);
-}
-
 //-----------------------------------
 // IPv4 L3 Forwarding
 //-----------------------------------
@@ -431,10 +423,7 @@ table l3_ipv4_override_table {
   reads {
     ipv4_base.dstAddr : lpm;
   }
-  actions {
-    l3_forwarding;
-    l3_set_ecmp_group;
-  }
+  action_profile: ecmp_action_profile;
 }
 
 table l3_ipv4_vrf_table {
@@ -442,21 +431,14 @@ table l3_ipv4_vrf_table {
     local_metadata.vrf_id: exact;
     ipv4_base.dstAddr : lpm;
   }
-  actions {
-    l3_forwarding;
-    l3_set_ecmp_group;
-  }
+  action_profile: ecmp_action_profile;
 }
 
 table l3_ipv4_fallback_table {
   reads {
     ipv4_base.dstAddr : lpm;
   }
-  actions {
-    l3_forwarding;
-    l3_set_ecmp_group;
-  }
-  default_action: l3_forwarding(0);
+  action_profile: ecmp_action_profile;
 }
 
 // LPM forwarding for IPV4 packets.
@@ -480,10 +462,7 @@ table l3_ipv6_override_table {
   reads {
     ipv6_base.dstAddr : lpm;
   }
-  actions {
-    l3_forwarding;
-    l3_set_ecmp_group;
-  }
+  action_profile: ecmp_action_profile;
 }
 
 table l3_ipv6_vrf_table {
@@ -491,21 +470,14 @@ table l3_ipv6_vrf_table {
     local_metadata.vrf_id: exact;
     ipv6_base.dstAddr : lpm;
   }
-  actions {
-    l3_forwarding;
-    l3_set_ecmp_group;
-  }
+  action_profile: ecmp_action_profile;
 }
 
 table l3_ipv6_fallback_table {
   reads {
     ipv6_base.dstAddr : lpm;
   }
-  actions {
-    l3_forwarding;
-    l3_set_ecmp_group;
-  }
-  default_action: l3_forwarding(0);
+  action_profile: ecmp_action_profile;
 }
 
 
@@ -543,24 +515,25 @@ action_selector ecmp_selector {
     selection_mode : fair;
 }
 
-action set_ecmp_nexthop(nexthop_index) {
-  modify_field(local_metadata.nexthop_index, nexthop_index);
+action set_ecmp_nexthop_info_port(port, smac, dmac) {
+  modify_field(standard_metadata.egress_spec, port);
+  modify_field(ethernet.srcAddr, smac);
+  modify_field(ethernet.dstAddr, dmac);
+}
+
+action set_ecmp_nexthop_info_lag(lag, smac, dmac) {
+  modify_field(local_metadata.lag_group_id, lag);
+  modify_field(ethernet.srcAddr, smac);
+  modify_field(ethernet.dstAddr, dmac);
 }
 
 action_profile ecmp_action_profile {
   actions {
-    set_ecmp_nexthop;
+    set_ecmp_nexthop_info_port;
+    set_ecmp_nexthop_info_lag;
   }
   dynamic_action_selection: ecmp_selector;
 }
-
-table l3_ecmp_resolve {
-  reads {
-    local_metadata.nexthop_group_id: exact;
-  }
-  action_profile: ecmp_action_profile;
-}
-
 
 //-----------------------------------
 // LAG egress port selection
@@ -604,26 +577,6 @@ table lag_resolve {
   action_profile: lag_action_profile;
 }
 
-
-action l3_egress_port_set(port) {
-  modify_field(standard_metadata.egress_spec, port);
-}
-
-action l3_egress_lag_set(lag) {
-  modify_field(local_metadata.lag_group_id, lag);
-}
-
-table l3_nexthop_resolve {
-  reads {
-    local_metadata.nexthop_index : exact;
-  }
-  actions {
-    l3_egress_port_set;
-    l3_egress_lag_set;
-  }
-  default_action: send_to_cpu(0);
-}
-
 // LPM forwarding for IPV6 packets.
 control ingress_ipv6_l3_forwarding {
   apply(l3_ipv6_override_table) {
@@ -650,52 +603,10 @@ control ingress_lpm_forwarding {
       ingress_ipv6_l3_forwarding();
     }
   }
-  if(local_metadata.nexthop_group_id == 0) {
-    apply(l3_nexthop_resolve);
-  } else {
-    apply(l3_ecmp_resolve);
-  }
   if(local_metadata.lag_group_id != 0) {
     apply(lag_resolve);
   }
 }
-
-//------------------------------------------------------------------------------
-// Egress Rewrite
-//------------------------------------------------------------------------------
-
-action rewrite_mac(smac) {
-  modify_field(ethernet.srcAddr, smac);
-}
-
-table egress_port_smac {
-  reads {
-    standard_metadata.egress_port: exact;
-  }
-  actions {
-    rewrite_mac;
-    drop_packet;
-  }
-  default_action: drop_packet();
-}
-
-// Sets the dest mac.
-action ipv4_ipv6_update_mac(dst_mac) {
-  modify_field(ethernet.dstAddr, dst_mac);
-  // if switch_properties is used, use a fixed MAC
-  // modify_field(ethernet.srcAddr, local_metadata.src_mac);
-}
-
-table ingress_nexthop_table {
-  reads {
-    local_metadata.nexthop_index : exact;
-  }
-  actions {
-    ipv4_ipv6_update_mac;
-  }
-  default_action: send_to_cpu(0);
-}
-
 
 //------------------------------------------------------------------------------
 // Send/Copy to the CPU
@@ -882,9 +793,6 @@ control ingress {
     apply(vrf_classifier_table);
     apply(l3_routing_classifier);
     ingress_lpm_forwarding();
-    if(valid(ipv4_base) or valid(ipv6_base)) {
-      apply(ingress_nexthop_table);
-    }
     process_punt_packets();
   }
 }
@@ -895,8 +803,5 @@ control ingress {
 
 // Performs egress control.
 control egress {
-  if (not valid(cpu_header)) {
-    apply(egress_port_smac);
-  }
 }
 
