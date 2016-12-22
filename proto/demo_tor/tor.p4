@@ -9,7 +9,7 @@
 //------------------------------------------------------------------------------
 
 #define CPU_PORT 64
-#define INITIAL_PACKET_OFFSET 64
+#define INITIAL_CPU_PACKET_OFFSET 64
 
 #define ARP_REASON 1
 
@@ -33,6 +33,8 @@
 #define CPU_MIRROR_SESSION_ID 1024
 
 #define PORT_COUNT 256
+
+#include "lag.p4"
 
 //------------------------------------------------------------------------------
 // Protocol Header Definitions
@@ -141,7 +143,7 @@ header_type cpu_header_t {
   fields {
     zeros : 64;
     reason : 16;
-    ingress_port : 32;
+    port : 32;
   }
 }
 
@@ -159,12 +161,9 @@ header_type local_metadata_t {
     color: 2;
     l4SrcPort: 16;
     l4DstPort: 16;
-    nexthop_index: 32;
-    nexthop_group_id: 32;
     icmp_code: 8;
     reason: 8; // Reason to drop to CPU
     src_mac: 48;
-    lag_group_id: 32;
   }
 }
 
@@ -197,7 +196,7 @@ metadata local_metadata_t local_metadata;
 
 // Start with ethernet always.
 parser start {
-  return select(current(0, INITIAL_PACKET_OFFSET)) {
+  return select(current(0, INITIAL_CPU_PACKET_OFFSET)) {
     0 :      parse_cpu_header;
     default: parse_ethernet;
   }
@@ -276,7 +275,7 @@ parser parse_cpu_header {
 }
 
 //------------------------------------------------------------------------------
-// Global actions
+// Actions
 //------------------------------------------------------------------------------
 
 // Do nothing action.
@@ -298,31 +297,10 @@ action send_packet_to_cpu() {
   modify_field(standard_metadata.egress_spec, CPU_PORT);
 }
 
-//------------------------------------------------------------------------------
-// Tables and Control Flows
-//------------------------------------------------------------------------------
-
-//------------------------------------------------------------------------------
-// Switch & Port Properties
-//------------------------------------------------------------------------------
-
-//-----------------------------------
-// Switch Properties
-//-----------------------------------
 
 action set_smac(smac) {
   modify_field(local_metadata.src_mac, smac);
 }
-
-table switch_properties {
-  actions {
-    set_smac;
-  }
-}
-
-//-----------------------------------
-// Port Properties
-//-----------------------------------
 
 // Sets the ’special' L2 Vlan that we allow (every other L2 packet forwarding is
 // disabled).
@@ -331,25 +309,83 @@ action set_l2_vlan(vid) {
   modify_field(vlan_tag[0].etherType, 0x8100);
 }
 
-table port_properties {
-  reads {
-    standard_metadata.ingress_port: exact;
-  }
-  actions {
-    set_l2_vlan;
-  }
-  default_action: set_l2_vlan(L2_VLAN);
+action set_class_id(class_id) {
+  modify_field(local_metadata.class_id, class_id);
 }
+
+action set_vrf(vrf_id) {
+  modify_field(local_metadata.vrf_id, vrf_id);
+}
+
+action set_ecmp_nexthop_info_port(port, smac, dmac) {
+  modify_field(standard_metadata.egress_spec, port);
+  modify_field(ethernet.srcAddr, smac);
+  modify_field(ethernet.dstAddr, dmac);
+}
+
+//------------------------------------------------------------------------------
+// Send/Copy to the CPU
+//------------------------------------------------------------------------------
+
+// send to cpu action (aka redirect to cpu)
+action send_to_cpu(reason) {
+  add_header(cpu_header);
+  modify_field(cpu_header.reason, reason);
+  modify_field(cpu_header.port, standard_metadata.ingress_port);
+  send_packet_to_cpu();
+}
+
+// copy to cpu action
+action copy_to_cpu(reason) {
+  modify_field(local_metadata.reason, reason);
+  copy_packet_to_cpu();
+}
+
+//-----------------------------------
+// Send/Copy to CPU in a given queue
+//-----------------------------------
+
+action set_queue_and_copy_to_cpu(qid, reason) {
+  modify_field(local_metadata.qid, qid);
+  copy_to_cpu(reason);
+}
+
+action set_queue_and_send_to_cpu(qid, reason) {
+  modify_field(local_metadata.qid, qid);
+  send_to_cpu(reason);
+}
+
+//------------------------------------------------------------------------------
+// Receive from CPU 
+//------------------------------------------------------------------------------
+
+action set_egress_port_and_decap_cpu_header() {
+  modify_field(standard_metadata.egress_spec, cpu_header.port);
+  remove_header(cpu_header);
+}
+
+action meter_packet(meter_index) {
+  modify_field(local_metadata.ingress_meter_index, meter_index);
+  execute_meter(ingress_port_meter, meter_index, local_metadata.color);
+}
+
+action meter_deny() {
+  drop();
+}
+
+action meter_permit() {
+}
+
+//------------------------------------------------------------------------------
+// Tables and Control Flows
+//------------------------------------------------------------------------------
+
 
 //------------------------------------------------------------------------------
 // Packet Classification
 //------------------------------------------------------------------------------
 
-action set_class_id(class_id) {
-  modify_field(local_metadata.class_id, class_id);
-}
-
-table class_id_assignment {
+table class_id_assignment_table {
   reads {
     ethernet.etherType: exact;
 
@@ -376,10 +412,6 @@ table class_id_assignment {
 // Map traffic to a particular VRF
 //-----------------------------------
 
-action set_vrf(vrf_id) {
-  modify_field(local_metadata.vrf_id, vrf_id);
-}
-
 table vrf_classifier_table {
   reads {
     ethernet.etherType : exact;
@@ -388,7 +420,6 @@ table vrf_classifier_table {
     standard_metadata.ingress_port: exact;
   }
   actions {
-    // Sets the VRF on a table hit.
     set_vrf;
   }
   default_action: set_vrf(DEFAULT_VRF0);
@@ -400,7 +431,7 @@ table vrf_classifier_table {
 
 // Drops packets that do not need to be part of L3 forwarding.
 // Equivalent of BCM MY_STATION table ?
-table l3_routing_classifier {
+table l3_routing_classifier_table {
   reads {
     ethernet.dstAddr : exact;
   }
@@ -515,66 +546,11 @@ action_selector ecmp_selector {
     selection_mode : fair;
 }
 
-action set_ecmp_nexthop_info_port(port, smac, dmac) {
-  modify_field(standard_metadata.egress_spec, port);
-  modify_field(ethernet.srcAddr, smac);
-  modify_field(ethernet.dstAddr, dmac);
-}
-
-action set_ecmp_nexthop_info_lag(lag, smac, dmac) {
-  modify_field(local_metadata.lag_group_id, lag);
-  modify_field(ethernet.srcAddr, smac);
-  modify_field(ethernet.dstAddr, dmac);
-}
-
 action_profile ecmp_action_profile {
   actions {
     set_ecmp_nexthop_info_port;
-    set_ecmp_nexthop_info_lag;
   }
   dynamic_action_selection: ecmp_selector;
-}
-
-//-----------------------------------
-// LAG egress port selection
-//-----------------------------------
-
-field_list lag_hash_fields {
-  ethernet.dstAddr;
-  ethernet.srcAddr;
-  ethernet.etherType;
-  standard_metadata.ingress_port;
-}
-
-field_list_calculation lag_hash {
-    input {
-        lag_hash_fields;
-    }
-    algorithm : crc16;
-    output_width : 14;
-}
-
-action_selector lag_selector {
-    selection_key : lag_hash;
-    selection_mode : fair;
-}
-
-action set_lag_egress_port(port) {
-  modify_field(standard_metadata.egress_spec, port);
-}
-
-action_profile lag_action_profile {
-  actions {
-    set_lag_egress_port;
-  }
-  dynamic_action_selection: lag_selector;
-}
-
-table lag_resolve {
-  reads {
-    local_metadata.lag_group_id: exact;
-  }
-  action_profile: lag_action_profile;
 }
 
 // LPM forwarding for IPV6 packets.
@@ -603,43 +579,13 @@ control ingress_lpm_forwarding {
       ingress_ipv6_l3_forwarding();
     }
   }
-  if(local_metadata.lag_group_id != 0) {
-    apply(lag_resolve);
-  }
+#ifdef P4_EXPLICIT_LAG
+  lag_handling();
+#endif
 }
 
-//------------------------------------------------------------------------------
-// Send/Copy to the CPU
-//------------------------------------------------------------------------------
-
-// send to cpu action (aka redirect to cpu)
-action send_to_cpu(reason) {
-  add_header(cpu_header);
-  modify_field(cpu_header.reason, reason);
-  modify_field(cpu_header.ingress_port, standard_metadata.ingress_port);
-  send_packet_to_cpu();
-}
-
-// copy to cpu action
-action copy_to_cpu(reason) {
-  modify_field(local_metadata.reason, reason);
-  copy_packet_to_cpu();
-}
-
-//-----------------------------------
-// Send/Copy to CPU in a given queue
-//-----------------------------------
-
-action set_queue_and_copy_to_cpu(qid, reason) {
-  modify_field(local_metadata.qid, qid);
-  copy_to_cpu(reason);
-}
-
-action set_queue_and_send_to_cpu(qid, reason) {
-  modify_field(local_metadata.qid, qid);
-  send_to_cpu(reason);
-}
-
+// Combined punt table.
+// TODO(wmohsin): target_egress_port in punted packet-io.
 table punt_table {
   reads {
     standard_metadata.ingress_port: ternary;
@@ -671,16 +617,6 @@ table punt_table {
     set_queue_and_copy_to_cpu;
     set_queue_and_send_to_cpu;
   }
-  default_action: nop(); // handle non control packets
-}
-
-//------------------------------------------------------------------------------
-// Receive from CPU 
-//------------------------------------------------------------------------------
-
-action set_egress_port_and_decap_cpu_header() {
-  modify_field(standard_metadata.egress_spec, cpu_header.ingress_port);
-  remove_header(cpu_header);
 }
 
 table process_cpu_header {
@@ -694,25 +630,13 @@ table process_cpu_header {
 // Meters
 //------------------------------------------------------------------------------
 
-//-----------------------------------
-// Meter Table
-//-----------------------------------
-
-meter meter_table {
+meter ingress_port_meter {
   type : bytes;
   instance_count : PORT_COUNT;
 }
 
-//-----------------------------------
-// Meter Assignment
-//-----------------------------------
-
-action set_meter_index(meter_index) {
-  modify_field(local_metadata.ingress_meter_index, meter_index);
-  execute_meter(meter_table, meter_index, local_metadata.color);
-}
-
-table ingress_port_meter {
+// Per-port ingress packet rate limiting.
+table ingress_port_meter_table {
   reads {
     standard_metadata.ingress_port: exact;
     standard_metadata.egress_spec: exact;
@@ -722,10 +646,8 @@ table ingress_port_meter {
     local_metadata.class_id: exact;
   }
   actions {
-    set_meter_index;
-    nop;
+    meter_packet;
   }
-//  default_action: nop();
 }
 
 //-----------------------------------
@@ -734,22 +656,10 @@ table ingress_port_meter {
 
 counter meter_stats {
   type : packets;
-  direct : ingress_port_meter_action;
+  direct : ingress_port_meter_policy_table;
 }
 
-//-----------------------------------
-// Meter Action -
-//  Run action based on meter color
-//-----------------------------------
-
-action meter_deny() {
-  drop();
-}
-
-action meter_permit() {
-}
-
-table ingress_port_meter_action {
+table ingress_port_meter_policy_table {
   reads {
     local_metadata.color : exact;
     local_metadata.ingress_meter_index : exact;
@@ -765,43 +675,27 @@ table ingress_port_meter_action {
 // Meter Control Flow
 //-----------------------------------
 
-// Meter control flow
 control process_punt_packets {
-  apply(punt_table) {
+  apply(punt_table);
+  apply(ingress_port_meter_table) {
     hit {
-      apply(ingress_port_meter) {
-        hit {
-          apply(ingress_port_meter_action);
-        }
-      }
+      apply(ingress_port_meter_policy_table);
     }
   }
 }
 
-//------------------------------------------------------------------------------
-// Main Ingress Control
-//------------------------------------------------------------------------------
-
-// Performs ingress control.
 control ingress {
-//  apply(switch_properties);
-//  apply(port_properties);
   if (valid(cpu_header)) {
     apply(process_cpu_header);
   } else {
-    apply(class_id_assignment);
+    apply(class_id_assignment_table);
     apply(vrf_classifier_table);
-    apply(l3_routing_classifier);
+    apply(l3_routing_classifier_table);
     ingress_lpm_forwarding();
     process_punt_packets();
   }
 }
 
-//------------------------------------------------------------------------------
-// Main Egress Control
-//------------------------------------------------------------------------------
-
-// Performs egress control.
 control egress {
 }
 
